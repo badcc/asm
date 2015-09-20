@@ -1,5 +1,4 @@
 // Anomalies
-// Cannot jump forwards, only backwards. "[-]" will execute once.
 // Memory restricted to 128 bytes.
 // Manual optimizations:
 // Decrement at the end of zeroed while loops (possible?)
@@ -7,14 +6,14 @@
 #define MAX_BUFFER 128
 int main(int argc, char** argv) {
 	int MemoryIndex = 128; // TODO(alex): Calculate memory needed.
-	FILE* File = fopen("test.alx", "r");	
+	FILE* File = fopen(argv[1], "r");	
 	char Buffer[MAX_BUFFER];
 	int BytesRead = fread(Buffer, 1, MAX_BUFFER, File);
 	fclose(File);
 	printf("Buffered %d Bytes.\n", BytesRead);
 	printf("Memory Size: %d Bytes.\n", MemoryIndex);
 	File = fopen("alx_compiled.asm", "w");
-	fprintf(File, "global main\nextern printf\nsection .data\nd: db \"%%c\"\nsection .text\nmain:\n");
+	fprintf(File, "global main\nextern printf\nsection .data\nd: db \"%%d\", 0\nc: db \"%%c\", 0\nsection .text\nmain:\n");
 	fprintf(File, "push rbp\nmov rbp, rsp\n"); // Stack Frame
 	// NOTE(alex): The program's memory is constrainted to stack size at the moment.
 	fprintf(File, "mov rax, -%d\nInit:\nmov byte [rbp+rax], 0\ninc rax\njnz Init\n", MemoryIndex);
@@ -22,7 +21,6 @@ int main(int argc, char** argv) {
 	char PrintOffset = 0;
 	for (int Index = 0; Index < BytesRead; Index++) {
 		char c = Buffer[Index];
-		// TODO(alex): Optimize multiple arithmetic with single instruction.
 		switch(c) {
 		case '+':
 		case '-':
@@ -41,19 +39,35 @@ int main(int argc, char** argv) {
 			else if (Value < -1) fprintf(File, "sub byte [rbp-%d], %d\n", MemoryIndex, Value);
 			break;
 		}
+		case ',':
 		case '.':
-			fprintf(File, "xor rax, rax\nmov rdi, d\nmov rsi, [rbp-%d]\nadd rsi, %d\ncall printf\n", MemoryIndex, PrintOffset);
+		{
+			fprintf(File, "xor rax, rax\nmov rdi, %c\nmovzx rsi, byte [rbp-%d]\n", c == ',' ? 'd' : 'c', MemoryIndex);
+			if (PrintOffset)
+				fprintf(File, "add rsi, %d\n", PrintOffset);
+			fprintf(File, "call printf\n");
+			PrintOffset = 0;
 			break;
+		}
 		case '>': MemoryIndex--; break;
 		case '<': MemoryIndex++; break;
 		case '[':
+		{
 			fprintf(File, "L%d:\n", Index);
+			int Stack = 1;
+			int NewIndex = 0;
+			for (NewIndex = Index+1; NewIndex < BytesRead; NewIndex++) {
+				c = Buffer[NewIndex];
+				if (c == ']') Stack--;
+				else if (c == '[') Stack++;
+				if (Stack == 0) break;	
+			}	
+			fprintf(File, "cmp byte [rbp-%d], 0\nje L%d\n", MemoryIndex, NewIndex);
 			break;
+		}
 		case ']':
 		{
-			// NOTE(alex): Optimize out cmp if dec at end of loop.
-			if (Buffer[Index-1] != '-')
-				fprintf(File, "cmp byte [rbp-%d], 0\n", MemoryIndex);
+			fprintf(File, "L%d:\n", Index);
 			int Stack = 1;
 			int NewIndex = 0;
 			for (NewIndex = Index-1; NewIndex > 0; NewIndex--) {
@@ -62,10 +76,13 @@ int main(int argc, char** argv) {
 				else if (c == '[') Stack--;
 				if (Stack == 0) break;
 			}
+			// NOTE(alex): Optimize out cmp if dec at end of loop.
+			if (Buffer[Index-1] != '-')
+				fprintf(File, "cmp byte [rbp-%d], 0\n", MemoryIndex);
 			fprintf(File, "jne L%d\n", NewIndex);	
 			break;
 		}
-		case '/': fprintf(File, "xor rax, rax\nmov rdi, d\nmov rsi, 10\ncall printf\n"); break;
+		case '/': fprintf(File, "xor rax, rax\nmov rdi, c\nmov rsi, 10\ncall printf\n"); break;
 		default: PrintOffset = c;
 		}
 		if (MemoryIndex <= 0) {
