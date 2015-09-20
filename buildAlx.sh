@@ -1,5 +1,6 @@
 gcc -std=c99 -o alx alx.c
-./alx $1 
-nasm -felf64 alx_compiled.asm
-gcc alx_compiled.o -o alx_compiled
-./alx_compiled
+./alx $1 $2.asm
+nasm -felf64 $2.asm
+gcc $2.o -o $2
+rm $2.o $2.asm
+./$2

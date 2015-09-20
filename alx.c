@@ -5,6 +5,7 @@
 #include <stdio.h>
 #define MAX_BUFFER 128
 int main(int argc, char** argv) {
+	if (argc < 2) { printf("Usage: %s FILE [OUT.asm]\n", argv[0]); return 1; }
 	int MemoryIndex = 128; // TODO(alex): Calculate memory needed.
 	FILE* File = fopen(argv[1], "r");	
 	char Buffer[MAX_BUFFER];
@@ -12,11 +13,11 @@ int main(int argc, char** argv) {
 	fclose(File);
 	printf("Buffered %d Bytes.\n", BytesRead);
 	printf("Memory Size: %d Bytes.\n", MemoryIndex);
-	File = fopen("alx_compiled.asm", "w");
+	File = fopen(argv[2] ? argv[2] : "alx_compiled.asm", "w");
 	fprintf(File, "global main\nextern printf\nsection .data\nd: db \"%%d\", 0\nc: db \"%%c\", 0\nsection .text\nmain:\n");
 	fprintf(File, "push rbp\nmov rbp, rsp\n"); // Stack Frame
 	// NOTE(alex): The program's memory is constrainted to stack size at the moment.
-	fprintf(File, "mov rax, -%d\nInit:\nmov byte [rbp+rax], 0\ninc rax\njnz Init\n", MemoryIndex);
+	fprintf(File, "mov rax, -%d\ninit:\nmov byte [rbp+rax], 0\ninc rax\njnz init\n", MemoryIndex);
 	//fprintf(File, "sub rsp, %d\n", 4 * 4); // TODO(alex): Dynamic stack allocation.
 	char PrintOffset = 0;
 	for (int Index = 0; Index < BytesRead; Index++) {
